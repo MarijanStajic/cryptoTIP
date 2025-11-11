@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Secure Messenger</title>
+</head>
+
+<body>
+    <h1>🔒 Secure Messenger</h1>
+
+    <input id="msg" placeholder="Enter your message" />
+    <button id="send">Send</button>
+
+    <pre id="log"></pre>
+
+    <script>
+        const log = (text) => {
+            const el = document.getElementById('log');
+            el.textContent += text + "\n";
+        };
+
+        const socket = new WebSocket("ws://localhost:3000");
+
+        socket.addEventListener('open', () => {
+            log("✅ Connected to WebSocket server");
+        });
+
+        socket.addEventListener('message', (event) => {
+            log("📩 " + event.data);
+        });
+
+        socket.addEventListener('close', () => {
+            log("❌ Connection closed");
+        });
+
+        document.getElementById('send').addEventListener('click', () => {
+            const input = document.getElementById('msg');
+            const msg = input.value;
+            if (msg && socket.readyState === WebSocket.OPEN) {
+                socket.send(msg);
+                log("➡️ Sent: " + msg);
+                input.value = "";
+            }
+        });
+    </script>
+</body>
+
+</html>
