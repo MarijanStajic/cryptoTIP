@@ -60,3 +60,7 @@ pnpm-lock.yaml
 # Miscellaneous
 *.local
 *.env.backup
+
+#serveur flask
+venv/
+__pycache__/
