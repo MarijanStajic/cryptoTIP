@@ -30,7 +30,7 @@ Functions:
 """
 
 import os
-import rsa_math
+from . import rsa_math
 from typing import Tuple
 
 PublicKey = Tuple[int, int]   # (n, e)
