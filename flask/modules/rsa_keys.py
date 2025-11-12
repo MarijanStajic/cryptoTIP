@@ -190,7 +190,7 @@ def load_keys(user_id: str, directory: str = "keys") -> Tuple[PublicKey, Private
 
 def get_or_create_keys(
     user_id: str,
-    bits: int = 512,
+    bits: int = 64,
     directory: str = "keys",
 ) -> Tuple[PublicKey, PrivateKey]:
     """
