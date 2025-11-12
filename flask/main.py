@@ -25,7 +25,7 @@ PORT = int(os.getenv("PORT", 5000))
 # ----------------------------
 # Initialize RSA keys
 # ----------------------------
-public_key, private_key = modules.rsa_keys.get_or_create_keys(USER_ID, bits=512)
+public_key, private_key = modules.rsa_keys.get_or_create_keys(USER_ID, bits=64)
 peer_public_key = None
 
 # ----------------------------
