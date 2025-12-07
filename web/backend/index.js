@@ -1,41 +1,144 @@
-const express = require('express');
-const http = require('http');
-const WebSocket = require('ws');
+// web/backend/index.js
+// WebSocket relay server with simple user IDs and public key storage
+// Author: Thomas Petermann
+
+const express = require("express");
+const http = require("http");
+const cors = require("cors");
+const WebSocket = require("ws");
+
+const PORT = process.env.WS_PORT || 3001;
 
 const app = express();
-const port = process.env.PORT || 3000;
+app.use(cors());
+app.use(express.json());
 
-// HTTP server
+app.get("/health", (req, res) => {
+    res.json({ status: "ok", service: "websocket-backend" });
+});
+
 const server = http.createServer(app);
-
-// WebSocket server attached to the HTTP server
 const wss = new WebSocket.Server({ server });
 
-// Serve static files from /public (the web UI)
-app.use(express.static('public'));
+// userId -> WebSocket
+const socketsByUser = new Map();
+// userId -> { n, e }
+const publicKeys = new Map();
 
-// Simple health check route
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok', message: 'WebSocket server is running 🚀' });
-});
+function safeParse(message) {
+    try {
+        return JSON.parse(message);
+    } catch {
+        return null;
+    }
+}
 
-// WebSocket connection handling
-wss.on('connection', (ws) => {
-    console.log('🔌 New client connected');
+function log(...args) {
+    console.log(...args);
+}
 
-    ws.on('message', (message) => {
-        console.log('📩 Message received:', message.toString());
+wss.on("connection", (ws) => {
+    log("Client connected");
 
-        // For now, just echo the message back to the client
-        ws.send(`Echo: ${message}`);
+    ws.on("message", (data) => {
+        const msg = safeParse(data);
+        if (!msg || !msg.type) {
+            return;
+        }
+
+        switch (msg.type) {
+            case "register": {
+                const { userId } = msg;
+                if (!userId) return;
+                ws.userId = userId;
+                socketsByUser.set(userId, ws);
+                log(`[register] ${userId}`);
+                break;
+            }
+
+            case "announcePublicKey": {
+                const { userId, publicKey } = msg;
+                if (!userId || !publicKey) return;
+                publicKeys.set(userId, publicKey);
+                log(`[announcePublicKey] from ${userId}`, publicKey);
+                break;
+            }
+
+            case "requestPublicKey": {
+                const { targetUserId } = msg;
+                if (!targetUserId) return;
+                const key = publicKeys.get(targetUserId) || null;
+                log(
+                    `[requestPublicKey] ${ws.userId} -> ${targetUserId}:`,
+                    key ? "FOUND" : "NOT FOUND"
+                );
+                ws.send(
+                    JSON.stringify({
+                        type: "publicKey",
+                        targetUserId,
+                        publicKey: key
+                    })
+                );
+                break;
+            }
+
+            case "sendMessage": {
+                const { to, from, ciphertext } = msg;
+                if (!to || !from || typeof ciphertext !== "string") return;
+
+                const targetWs = socketsByUser.get(to);
+                if (!targetWs) {
+                    log(`[sendMessage] ${from} -> ${to}: user offline`);
+                    ws.send(
+                        JSON.stringify({
+                            type: "deliveryStatus",
+                            ok: false,
+                            to,
+                            reason: "user offline",
+                        })
+                    );
+                    return;
+                }
+
+                log(`[sendMessage] ${from} -> ${to}: ciphertext length=${ciphertext.length}`);
+
+                // Message forwarded to recipient (chiffré)
+                targetWs.send(
+                    JSON.stringify({
+                        type: "message",
+                        from,
+                        ciphertext,
+                    })
+                );
+
+                // Acknowledge to sender
+                ws.send(
+                    JSON.stringify({
+                        type: "deliveryStatus",
+                        ok: true,
+                        to,
+                    })
+                );
+                break;
+            }
+
+
+            default:
+                log("Unknown message type:", msg.type);
+        }
     });
 
-    ws.on('close', () => {
-        console.log('❌ Client disconnected');
+    ws.on("close", () => {
+        const userId = ws.userId;
+        if (userId && socketsByUser.get(userId) === ws) {
+            socketsByUser.delete(userId);
+            log(`Client disconnected: ${userId}`);
+        } else {
+            log("Client disconnected (no userId)");
+        }
     });
 });
 
-// Start the server
-server.listen(port, () => {
-    console.log(`🚀 Server listening on http://localhost:${port}`);
+server.listen(PORT, () => {
+    console.log(`WebSocket backend running on http://localhost:${PORT}`);
 });

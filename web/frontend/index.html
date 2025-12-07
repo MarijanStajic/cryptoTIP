@@ -2,46 +2,322 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <title>Secure Messenger</title>
+    <meta charset="UTF-8" />
+    <title>CryptoTIP – WebSocket RSA test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #111;
+            color: #eee;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        input,
+        button {
+            padding: 6px 10px;
+            margin: 4px 0;
+        }
+
+        #log {
+            border: 1px solid #444;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            background: #000;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+
+        .row {
+            margin-bottom: 10px;
+        }
+
+        label {
+            display: inline-block;
+            width: 90px;
+        }
+    </style>
 </head>
 
 <body>
-    <h1>🔒 Secure Messenger</h1>
+    <div class="container">
+        <h1>CryptoTIP – Web + Flask + WebSocket</h1>
 
-    <input id="msg" placeholder="Enter your message" />
-    <button id="send">Send</button>
+        <div class="row">
+            <label for="wsUrl">WS URL</label>
+            <input id="wsUrl" type="text" value="ws://localhost:3001" size="40" />
+            <button id="connectBtn">Connect</button>
+        </div>
 
-    <pre id="log"></pre>
+        <div class="row">
+            <label for="flaskUrl">Flask URL</label>
+            <input id="flaskUrl" type="text" value="http://localhost:5000" size="40" />
+        </div>
+
+        <div class="row">
+            <label for="userId">Your ID</label>
+            <input id="userId" type="text" value="A" />
+        </div>
+
+        <div class="row">
+            <label for="peerId">To</label>
+            <input id="peerId" type="text" value="B" />
+        </div>
+
+        <div class="row">
+            <label for="messageInput">Message</label>
+            <input id="messageInput" type="text" size="40" />
+            <button id="sendBtn">Send</button>
+        </div>
+
+        <h3>Log</h3>
+        <div id="log"></div>
+    </div>
 
     <script>
-        const log = (text) => {
-            const el = document.getElementById('log');
-            el.textContent += text + "\n";
-        };
+        let socket = null;
+        let myPublicKey = null;
 
-        const socket = new WebSocket("ws://localhost:3000");
+        const logEl = document.getElementById("log");
+        const wsUrlEl = document.getElementById("wsUrl");
+        const flaskUrlEl = document.getElementById("flaskUrl");
+        const userIdEl = document.getElementById("userId");
+        const peerIdEl = document.getElementById("peerId");
+        const messageInputEl = document.getElementById("messageInput");
+        const connectBtn = document.getElementById("connectBtn");
+        const sendBtn = document.getElementById("sendBtn");
 
-        socket.addEventListener('open', () => {
-            log("✅ Connected to WebSocket server");
-        });
+        function log(message) {
+            const time = new Date().toISOString().split("T")[1].split(".")[0];
+            logEl.textContent += `[${time}] ${message}\n`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
 
-        socket.addEventListener('message', (event) => {
-            log("📩 " + event.data);
-        });
+        connectBtn.addEventListener("click", () => {
+            const wsUrl = wsUrlEl.value.trim();
+            const flaskUrl = flaskUrlEl.value.trim();
+            const userId = userIdEl.value.trim();
 
-        socket.addEventListener('close', () => {
-            log("❌ Connection closed");
-        });
-
-        document.getElementById('send').addEventListener('click', () => {
-            const input = document.getElementById('msg');
-            const msg = input.value;
-            if (msg && socket.readyState === WebSocket.OPEN) {
-                socket.send(msg);
-                log("➡️ Sent: " + msg);
-                input.value = "";
+            if (!wsUrl || !flaskUrl || !userId) {
+                alert("Please enter WS URL, Flask URL and your user ID.");
+                return;
             }
+
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                log("Already connected.");
+                return;
+            }
+
+            log(`Connecting to ${wsUrl} as ${userId} ...`);
+            socket = new WebSocket(wsUrl);
+
+            socket.addEventListener("open", async () => {
+                log("Connected to WebSocket server");
+
+                // 1) Register
+                const registerMsg = {
+                    type: "register",
+                    userId: userId,
+                };
+                socket.send(JSON.stringify(registerMsg));
+                log(`Sent register as "${userId}"`);
+
+                // 2) Récupérer la clé publique depuis le Flask local
+                try {
+                    const res = await fetch(`${flaskUrl}/public_key`);
+                    if (!res.ok) {
+                        throw new Error("HTTP " + res.status);
+                    }
+                    const data = await res.json();
+                    myPublicKey = data.public_key || data.publicKey || null;
+
+                    if (!myPublicKey || !myPublicKey.n || !myPublicKey.e) {
+                        log("Invalid public key format from Flask.");
+                    } else {
+                        const nPreview =
+                            typeof myPublicKey.n === "string"
+                                ? myPublicKey.n.slice(0, 16)
+                                : String(myPublicKey.n).slice(0, 16);
+                        log(`Loaded public key from Flask: n=${nPreview}...`);
+
+                        // 3) Annoncer la clé publique au serveur WebSocket
+                        const announceMsg = {
+                            type: "announcePublicKey",
+                            userId: userId,
+                            publicKey: myPublicKey,
+                        };
+                        socket.send(JSON.stringify(announceMsg));
+                        log("Announced public key to WebSocket server");
+                    }
+                } catch (err) {
+                    console.error(err);
+                    log("Failed to fetch public key from Flask: " + err.message);
+                }
+            });
+
+            socket.addEventListener("message", async (event) => {
+                let msg;
+                try {
+                    msg = JSON.parse(event.data);
+                } catch (err) {
+                    log("Received non-JSON message: " + event.data);
+                    return;
+                }
+
+                if (msg.type === "message") {
+                    // Réception d'un message chiffré : on demande à Flask de le déchiffrer
+                    const flaskUrl = flaskUrlEl.value.trim();
+                    const ciphertext = msg.ciphertext;
+
+                    log("Ciphertext received:");
+                    log(ciphertext);
+
+                    log(`Ciphertext received from ${msg.from}, length=${ciphertext.length}`);
+
+                    try {
+                        const res = await fetch(`${flaskUrl}/decrypt`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ ciphertext }),
+                        });
+                        if (!res.ok) {
+                            throw new Error("HTTP " + res.status);
+                        }
+                        const data = await res.json();
+                        const plaintext = data.plaintext;
+                        log(`Decrypted message from ${msg.from}: ${plaintext}`);
+                    } catch (err) {
+                        console.error(err);
+                        log("Failed to decrypt message via Flask: " + err.message);
+                    }
+                } else if (msg.type === "deliveryStatus") {
+                    if (msg.ok) {
+                        log(`Message delivered to ${msg.to}`);
+                    } else {
+                        log(`Failed to deliver to ${msg.to}: ${msg.reason || "unknown reason"}`);
+                    }
+                } else if (msg.type === "publicKey") {
+                    log(
+                        `Received public key for ${msg.targetUserId}: ${msg.publicKey ? "present" : "null"
+                        }`
+                    );
+                } else {
+                    log("Received: " + event.data);
+                }
+            });
+
+            socket.addEventListener("close", () => {
+                log("Disconnected from server");
+            });
+
+            socket.addEventListener("error", (err) => {
+                log("WebSocket error");
+                console.error(err);
+            });
+        });
+
+        sendBtn.addEventListener("click", async () => {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                alert("Not connected to WebSocket server.");
+                return;
+            }
+
+            const from = userIdEl.value.trim();
+            const to = peerIdEl.value.trim();
+            const plaintext = messageInputEl.value;
+            const flaskUrl = flaskUrlEl.value.trim();
+
+            if (!from || !to) {
+                alert("Please set your ID and the receiver ID.");
+                return;
+            }
+            if (!plaintext) {
+                alert("Please enter a message.");
+                return;
+            }
+
+            // 1) Demander la clé publique du peer au serveur WebSocket
+            const requestMsg = {
+                type: "requestPublicKey",
+                targetUserId: to,
+            };
+            socket.send(JSON.stringify(requestMsg));
+            log(`Requested public key for ${to} from WebSocket server`);
+
+            // 2) Attendre une réponse "publicKey" correspondante puis enchaîner encrypt + send
+            const onPublicKey = async (event) => {
+                let msg;
+                try {
+                    msg = JSON.parse(event.data);
+                } catch {
+                    return;
+                }
+                if (msg.type !== "publicKey") return;
+                if (msg.targetUserId !== to) return;
+
+                socket.removeEventListener("message", onPublicKey);
+
+                if (!msg.publicKey) {
+                    log(`No public key found for ${to}`);
+                    return;
+                }
+
+                log(`Got public key for ${to}, sending it to Flask`);
+
+                try {
+                    // 2a) Pousser la clé publique du peer dans Flask
+                    const resSet = await fetch(`${flaskUrl}/set_peer_public_key`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ public_key: msg.publicKey }),
+                    });
+                    if (!resSet.ok) {
+                        throw new Error("HTTP " + resSet.status);
+                    }
+                    log(`Peer public key set in Flask for ${to}`);
+
+                    // 2b) Demander à Flask de chiffrer le message
+                    const resEnc = await fetch(`${flaskUrl}/encrypt`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ plaintext }),
+                    });
+                    if (!resEnc.ok) {
+                        throw new Error("HTTP " + resEnc.status);
+                    }
+                    const encData = await resEnc.json();
+                    const ciphertext = encData.ciphertext;
+
+                    log(`Message encrypted, ciphertext length=${ciphertext.length}`);
+                    log("Ciphertext generated:");
+                    log(ciphertext);
+
+                    log(`Message encrypted, ciphertext length=${ciphertext.length}`);
+
+                    // 3) Envoyer le ciphertext via WebSocket
+                    const msgToSend = {
+                        type: "sendMessage",
+                        from,
+                        to,
+                        ciphertext,
+                    };
+                    socket.send(JSON.stringify(msgToSend));
+                    log(`Sent encrypted message to ${to}`);
+
+                    messageInputEl.value = "";
+                } catch (err) {
+                    console.error(err);
+                    log("Failed to encrypt/send via Flask: " + err.message);
+                }
+            };
+
+            socket.addEventListener("message", onPublicKey);
         });
     </script>
 </body>
