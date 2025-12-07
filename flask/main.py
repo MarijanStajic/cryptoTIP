@@ -13,6 +13,7 @@ It exposes HTTP routes for:
 from flask import Flask, request, jsonify
 import modules
 from dotenv import load_dotenv
+from flask_cors import CORS
 import os
 
 # ----------------------------
@@ -32,6 +33,7 @@ peer_public_key = None
 # Initialize Flask app
 # ----------------------------
 app = Flask(__name__)
+CORS(app)
 
 # ----------------------------
 # Routes
