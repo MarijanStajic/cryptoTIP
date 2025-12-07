@@ -1,0 +1,69 @@
+# =========================================
+# Node.js / Express project
+# =========================================
+
+# Node dependencies
+node_modules/
+
+# Environment files (never commit secrets)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+dist/
+build/
+.tmp/
+.temp/
+.cache/
+out/
+.next/
+coverage/
+
+# Tailwind / PostCSS cache
+.pnp.*
+.postcss-cache/
+tailwind.config.js.bak
+
+# IDEs & editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*.bak
+*.tmp
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# TypeScript (if you add it later)
+*.tsbuildinfo
+
+# Optional: lockfiles (if you use only one package manager)
+# Remove the ones you actually use
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Miscellaneous
+*.local
+*.env.backup
+
+#serveur flask
+venv/
+__pycache__/
+
+#RSA keys
+keys/
