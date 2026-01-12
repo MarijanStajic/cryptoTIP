@@ -5,19 +5,29 @@
   "main": "backend/index.js",
   "scripts": {
     "start": "node backend/index.js",
-    "dev": "nodemon backend/index.js"
+    "dev": "nodemon backend/index.js",
+    "front:serve": "node frontend/serve.cjs",
+    "front:tw:watch": "tailwindcss -c frontend/tailwind.config.cjs -i frontend/input.css -o frontend/styles.css --watch",
+    "front:tw:build": "tailwindcss -c frontend/tailwind.config.cjs -i frontend/input.css -o frontend/styles.css --minify",
+    "front:dev": "npm-run-all -p front:serve front:tw:watch"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^5.1.0",
+    "express": "^5.2.1",
     "socket.io": "^4.8.1",
     "ws": "^8.18.3"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "@tailwindcss/cli": "^4.1.18",
+    "autoprefixer": "^10.4.23",
+    "concurrently": "^9.2.1",
+    "nodemon": "^3.1.11",
+    "npm-run-all": "^4.1.5",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18"
   },
   "type": "commonjs"
 }
