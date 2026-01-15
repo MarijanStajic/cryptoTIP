@@ -14,10 +14,7 @@ implementation:
 - generate_prime(bits): generate a random prime number of a given bit size
 - lcm(a, b): least common multiple of two integers
 """
-
-import random
-import math
-
+from sympy import randprime
 
 def gcd(a: int, b: int) -> int:
     """
@@ -61,47 +58,14 @@ def modinv(a: int, m: int) -> int:
     return x % m
 
 
-def is_prime(n: int) -> bool:
-    """
-    Check if n is a prime number using simple trial division.
-
-    This is not optimized for very large numbers, but is sufficient
-    for educational purposes and moderate bit sizes.
-    """
-    if n <= 1:
-        return False
-    if n <= 3:
-        return True
-    if n % 2 == 0:
-        return False
-
-    limit = int(math.isqrt(n))
-    for i in range(3, limit + 1, 2):
-        if n % i == 0:
-            return False
-    return True
-
-
 def generate_prime(bits: int) -> int:
     """
-    Generate a random prime number with the given bit length.
-
-    The function:
-    - generates a random odd candidate with the highest bit set,
-    - tests primality with is_prime,
-    - repeats until a prime is found.
+    Generate a random prime number with the given bit length
+    using sympy's randprime function.
     """
-    if bits < 2:
-        raise ValueError("Number of bits must be at least 2")
-
-    while True:
-        # Generate a random odd candidate
-        candidate = random.getrandbits(bits) | 1
-        # Ensure the most significant bit is set so we really get 'bits' bits
-        candidate |= (1 << (bits - 1))
-
-        if is_prime(candidate):
-            return candidate
+    lower = 2 ** (bits - 1)
+    upper = 2 ** bits - 1
+    return randprime(lower, upper)
 
 
 def lcm(a: int, b: int) -> int:
